@@ -26,7 +26,14 @@ console = Console()
 
 
 @app.command(name="list")
-def list_tags():
+def list_tags(
+    show_full: bool = typer.Option(
+        False,
+        "--show-full",
+        "-f",
+        help="Show all devices, rather than truncating the list",
+    ),
+):
     """List all tags used in the tailnet and the devices using them."""
     try:
         api = TailscaleAPI.from_stored_auth()
@@ -60,9 +67,12 @@ def list_tags():
         table.add_column("Devices", style="dim")
 
         for tag, device_list in sorted(tag_to_devices.items()):
-            devices_str = ", ".join(d.name for d in device_list[:5])
-            if len(device_list) > 5:
-                devices_str += f" and {len(device_list) - 5} more"
+            if show_full:
+                devices_str = ", ".join(d.name for d in device_list)
+            else:
+                devices_str = ", ".join(d.name for d in device_list[:5])
+                if len(device_list) > 5:
+                    devices_str += f" and {len(device_list) - 5} more"
 
             table.add_row(tag, str(len(device_list)), devices_str)
 
@@ -211,20 +221,22 @@ def remove_tag_command(
     ),
 ):
     """Remove a tag from devices.
-    
+
     If no devices are specified, removes the tag from all devices in the tailnet.
     """
     try:
         api = TailscaleAPI.from_stored_auth()
 
         # Get the changes that would be made
-        changes = remove_tag_from_all(api, tag, device_identifiers=devices, dry_run=True)
+        changes = remove_tag_from_all(
+            api, tag, device_identifiers=devices, dry_run=True
+        )
 
         if devices:
             device_str = f"from {len(devices)} specified devices"
         else:
             device_str = "from all devices"
-            
+
         console.print(f"[bold]Removing tag[/bold] {tag} [bold]{device_str}[/bold]")
         print_tag_changes(changes, console)
 
@@ -253,7 +265,9 @@ def remove_tag_command(
 
 @app.command(name="set")
 def set_tags_command(
-    devices: List[str] = typer.Argument(..., help="Device names or IDs (comma-separated)"),
+    devices: List[str] = typer.Argument(
+        ..., help="Device names or IDs (comma-separated)"
+    ),
     tags: List[str] = typer.Option(
         ..., "--tag", "-t", help="Tags to set (can be used multiple times)"
     ),
@@ -297,7 +311,9 @@ def set_tags_command(
 
 @app.command(name="add")
 def add_tags_command(
-    devices: List[str] = typer.Argument(..., help="Device names or IDs (comma-separated)"),
+    devices: List[str] = typer.Argument(
+        ..., help="Device names or IDs (comma-separated)"
+    ),
     tags: List[str] = typer.Option(
         ..., "--tag", "-t", help="Tags to add (can be used multiple times)"
     ),
@@ -313,9 +329,7 @@ def add_tags_command(
         changes = add_tags_to_devices(api, devices, tags, dry_run=True)
 
         tag_list = ", ".join(tags) if tags else "none"
-        console.print(
-            f"[bold]Adding tags to {len(devices)} devices:[/bold] {tag_list}"
-        )
+        console.print(f"[bold]Adding tags to {len(devices)} devices:[/bold] {tag_list}")
         print_tag_changes(changes, console)
 
         if not changes:
