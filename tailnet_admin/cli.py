@@ -2,7 +2,6 @@
 
 import typer
 from rich.console import Console
-from typing import Optional
 
 from tailnet_admin import __version__
 from tailnet_admin.api import TailscaleAPI
@@ -24,11 +23,45 @@ def callback(
 
 @app.command()
 def auth(
-    client_id: str = typer.Option(..., help="OAuth client ID"),
-    client_secret: Optional[str] = typer.Option(None, help="OAuth client secret"),
-    tailnet: str = typer.Option(..., help="Tailnet name (e.g., example.com)"),
+    client_id: str = typer.Option(
+        None, help="API client ID", envvar="TAILSCALE_CLIENT_ID"
+    ),
+    client_secret: str = typer.Option(
+        None, help="API client secret", envvar="TAILSCALE_CLIENT_SECRET"
+    ),
+    tailnet: str = typer.Option(
+        None, help="Tailnet name (e.g., example.com)", envvar="TAILSCALE_TAILNET"
+    ),
 ):
-    """Authenticate with Tailscale API using OAuth."""
+    """Authenticate with Tailscale API using client credentials.
+
+    You can provide credentials via command-line options or environment variables:
+    - TAILSCALE_CLIENT_ID: API client ID
+    - TAILSCALE_CLIENT_SECRET: API client secret
+    - TAILSCALE_TAILNET: Tailnet name
+    """
+    # Check if credentials are provided
+    if not client_id:
+        console.print("[red]Error:[/red] Client ID is required.")
+        console.print(
+            "Provide it with --client-id or set the TAILSCALE_CLIENT_ID environment variable."
+        )
+        raise typer.Exit(code=1)
+
+    if not client_secret:
+        console.print("[red]Error:[/red] Client secret is required.")
+        console.print(
+            "Provide it with --client-secret or set the TAILSCALE_CLIENT_SECRET environment variable."
+        )
+        raise typer.Exit(code=1)
+
+    if not tailnet:
+        console.print("[red]Error:[/red] Tailnet name is required.")
+        console.print(
+            "Provide it with --tailnet or set the TAILSCALE_TAILNET environment variable."
+        )
+        raise typer.Exit(code=1)
+
     try:
         api = TailscaleAPI(tailnet)
         api.authenticate(client_id, client_secret)
@@ -37,7 +70,9 @@ def auth(
         raise typer.Exit(code=1)
     except Exception as e:
         console.print(f"[red]Unexpected error:[/red] {str(e)}")
-        console.print("[yellow]Try checking your client ID and tailnet name.[/yellow]")
+        console.print(
+            "[yellow]Try checking your client ID, secret, and tailnet name.[/yellow]"
+        )
         raise typer.Exit(code=1)
 
 
@@ -47,11 +82,11 @@ def devices():
     try:
         api = TailscaleAPI.from_stored_auth()
         device_list = api.get_devices()
-        
+
         if not device_list:
             console.print("[yellow]No devices found in this tailnet.[/yellow]")
             return
-        
+
         for device in device_list:
             console.print(f"[bold]{device.name}[/bold] ({device.id})")
             console.print(f"  IP: {device.ip}")
@@ -73,11 +108,11 @@ def keys():
     try:
         api = TailscaleAPI.from_stored_auth()
         key_list = api.get_keys()
-        
+
         if not key_list:
             console.print("[yellow]No API keys found in this tailnet.[/yellow]")
             return
-        
+
         for key in key_list:
             console.print(f"[bold]{key.name}[/bold] ({key.id})")
             console.print(f"  Created: {key.created}")
@@ -96,24 +131,25 @@ def keys():
 def status():
     """Show authentication status."""
     import json
-    from pathlib import Path
     import time
+    from pathlib import Path
+
     import keyring
-    
+
     config_dir = Path.home() / ".config" / "tailnet-admin"
     config_file = config_dir / "config.json"
-    
+
     if not config_file.exists():
         console.print("[yellow]Not authenticated.[/yellow]")
         console.print("Run 'tailnet-admin auth' to authenticate with Tailscale API.")
         return
-    
+
     try:
         with open(config_file, "r") as f:
             config = json.load(f)
-            
+
         tailnet = config.get("tailnet", "Unknown")
-        
+
         # Check if token exists in keyring
         token_exists = False
         try:
@@ -121,19 +157,19 @@ def status():
             token_exists = token is not None
         except Exception:
             pass
-        
+
         console.print(f"[bold]Authentication Status[/bold]")
         console.print(f"Tailnet: [green]{tailnet}[/green]")
-        
+
         if token_exists:
             console.print("Token: [green]Present[/green]")
         else:
             console.print("Token: [red]Missing[/red]")
-        
+
         if "expires_at" in config:
             expires_at = config["expires_at"]
             now = time.time()
-            
+
             if expires_at > now:
                 expires_in = int(expires_at - now)
                 hours = expires_in // 3600
@@ -152,26 +188,29 @@ def logout():
     """Clear stored authentication data."""
     import json
     from pathlib import Path
+
     import keyring
-    
+
     config_dir = Path.home() / ".config" / "tailnet-admin"
     config_file = config_dir / "config.json"
-    
+
     if not config_file.exists():
         console.print("[yellow]No stored authentication found.[/yellow]")
         return
-    
+
     try:
         with open(config_file, "r") as f:
             config = json.load(f)
-            
+
         tailnet = config.get("tailnet")
         if tailnet:
             keyring.delete_password(TailscaleAPI.AUTH_SERVICE_NAME, tailnet)
-        
+
         config_file.unlink()
-        
-        console.print("[green]Successfully logged out and cleared authentication data.[/green]")
+
+        console.print(
+            "[green]Successfully logged out and cleared authentication data.[/green]"
+        )
     except Exception as e:
         console.print(f"[red]Error clearing authentication:[/red] {str(e)}")
         raise typer.Exit(code=1)

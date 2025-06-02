@@ -39,11 +39,28 @@ class TailscaleAPI:
         
         Args:
             tailnet: Tailnet name (e.g., example.com)
-            token: OAuth access token (optional)
+            token: API access token (optional)
         """
         self.tailnet = tailnet
         self.token = token
-        self.client = httpx.Client(base_url=self.API_BASE_URL)
+        
+        # Configure client with timeouts, retries and headers
+        limits = httpx.Limits(max_keepalive_connections=5, max_connections=10)
+        timeout = httpx.Timeout(10.0, connect=5.0)
+        
+        # Create a transport with automatic retries
+        transport = httpx.HTTPTransport(retries=3)
+        
+        self.client = httpx.Client(
+            base_url=self.API_BASE_URL,
+            timeout=timeout,
+            limits=limits,
+            transport=transport,
+            headers={
+                "User-Agent": f"tailnet-admin/{__import__('tailnet_admin').__version__}",
+                "Accept": "application/json",
+            }
+        )
         
         if token:
             self.client.headers.update({"Authorization": f"Bearer {token}"})
@@ -77,115 +94,47 @@ class TailscaleAPI:
             
         return cls(tailnet=tailnet, token=token)
     
-    def authenticate(self, client_id: str, client_secret: Optional[str] = None) -> None:
-        """Authenticate with Tailscale API using OAuth.
+    def authenticate(self, client_id: str, client_secret: str) -> None:
+        """Authenticate with Tailscale API using client credentials.
         
         Args:
-            client_id: OAuth client ID
-            client_secret: OAuth client secret (optional)
+            client_id: API client ID
+            client_secret: API client secret
         
         Raises:
             ValueError: If authentication fails
         """
-        import webbrowser
         import time
-        import secrets
-        import http.server
-        import socketserver
-        import threading
-        import urllib.parse
+        import base64
         from rich.console import Console
         
         console = Console()
         
-        # Create a secure random state parameter to prevent CSRF
-        state = secrets.token_urlsafe(16)
-        redirect_uri = "http://localhost:8000/callback"
-        
-        # Tailscale OAuth endpoints
-        auth_endpoint = "https://login.tailscale.com/oauth/authorize"
-        token_endpoint = "https://login.tailscale.com/oauth/token"
-        
-        # Store for the received authorization code
-        auth_code = [None]
-        auth_completed = threading.Event()
-        
-        # Handler for the OAuth callback
-        class CallbackHandler(http.server.BaseHTTPRequestHandler):
-            def do_GET(self):
-                query = urllib.parse.urlparse(self.path).query
-                query_params = urllib.parse.parse_qs(query)
-                
-                if self.path.startswith("/callback"):
-                    received_state = query_params.get("state", [""])[0]
-                    
-                    # Verify state to prevent CSRF attacks
-                    if received_state != state:
-                        self.send_response(400)
-                        self.send_header("Content-type", "text/html")
-                        self.end_headers()
-                        self.wfile.write(b"Invalid state parameter. Authentication failed.")
-                        return
-                    
-                    # Get the authorization code
-                    auth_code[0] = query_params.get("code", [""])[0]
-                    
-                    # Send success response
-                    self.send_response(200)
-                    self.send_header("Content-type", "text/html")
-                    self.end_headers()
-                    self.wfile.write(b"<html><head><title>Authentication Successful</title></head>")
-                    self.wfile.write(b"<body><h1>Authentication Successful!</h1>")
-                    self.wfile.write(b"<p>You can now close this window and return to the terminal.</p>")
-                    self.wfile.write(b"</body></html>")
-                    
-                    # Signal that authentication is complete
-                    auth_completed.set()
-        
-        # Start the local server to receive the callback
-        server = socketserver.TCPServer(("localhost", 8000), CallbackHandler)
-        server_thread = threading.Thread(target=server.serve_forever)
-        server_thread.daemon = True
-        server_thread.start()
-        
         try:
-            # Construct the authorization URL
-            params = {
-                "client_id": client_id,
-                "response_type": "code",
-                "scope": "devices:read keys:read",
-                "redirect_uri": redirect_uri,
-                "state": state,
-            }
-            auth_url = f"{auth_endpoint}?{urllib.parse.urlencode(params)}"
+            # For Tailscale, we use Basic Auth with client ID and secret
+            # to obtain an access token directly
+            auth_string = f"{client_id}:{client_secret}"
+            auth_bytes = auth_string.encode('ascii')
+            auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
             
-            # Open the browser for the user to authenticate
-            console.print(f"Opening browser for authentication...")
-            webbrowser.open(auth_url)
-            
-            # Wait for authentication to complete (timeout after 5 minutes)
-            console.print("Waiting for authentication to complete in the browser...")
-            auth_completed.wait(300)
-            
-            if not auth_code[0]:
-                raise ValueError("Authentication timed out or was cancelled")
-            
-            # Exchange the authorization code for an access token
-            token_data = {
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "grant_type": "authorization_code",
-                "code": auth_code[0],
-                "redirect_uri": redirect_uri,
+            # Set the authorization header with Basic auth
+            headers = {
+                "Authorization": f"Basic {auth_b64}",
+                "Content-Type": "application/x-www-form-urlencoded"
             }
             
-            # Remove None values
-            token_data = {k: v for k, v in token_data.items() if v is not None}
+            # Make the request to get an access token
+            token_endpoint = "https://api.tailscale.com/api/v2/oauth/token"
+            data = {
+                "grant_type": "client_credentials",
+                "client_id": client_id
+            }
             
-            token_response = httpx.post(token_endpoint, data=token_data)
-            token_response.raise_for_status()
+            console.print("Authenticating with Tailscale API...")
+            response = httpx.post(token_endpoint, headers=headers, data=data)
+            response.raise_for_status()
             
-            token_info = token_response.json()
+            token_info = response.json()
             token = token_info.get("access_token")
             
             if not token:
@@ -195,11 +144,15 @@ class TailscaleAPI:
             config_dir = Path.home() / ".config" / "tailnet-admin"
             config_dir.mkdir(parents=True, exist_ok=True)
             
+            # Calculate expiration time (default to 1 hour if not provided)
+            expires_in = token_info.get("expires_in", 3600)
+            expires_at = time.time() + expires_in
+            
             with open(config_dir / "config.json", "w") as f:
                 json.dump({
                     "tailnet": self.tailnet,
                     "token_type": token_info.get("token_type", "Bearer"),
-                    "expires_at": time.time() + token_info.get("expires_in", 3600),
+                    "expires_at": expires_at,
                 }, f)
             
             # Store only the access token in the keyring
@@ -210,13 +163,15 @@ class TailscaleAPI:
             self.client.headers.update({"Authorization": f"Bearer {token}"})
             
             console.print("[green]Authentication successful![/green]")
+            console.print(f"Token will expire in {expires_in // 3600} hours, {(expires_in % 3600) // 60} minutes.")
             
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                raise ValueError("Authentication failed: Invalid client ID or secret")
+            else:
+                raise ValueError(f"Authentication failed: {e.response.text}")
         except Exception as e:
             raise ValueError(f"Authentication failed: {str(e)}")
-        finally:
-            # Shutdown the server
-            server.shutdown()
-            server.server_close()
     
     def get_devices(self) -> List[Device]:
         """Get all devices in the tailnet.
