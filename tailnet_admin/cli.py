@@ -81,25 +81,27 @@ def test_auth():
     """Test the authentication and display basic information."""
     try:
         api = TailscaleAPI.from_stored_auth()
-        
+
         # Make a simple API request to test the token
         response = api.client.get(f"/tailnet/{api.tailnet}")
         response.raise_for_status()
-        
+
         # Extract and display basic information
         data = response.json()
         name = data.get("name", "Unknown")
-        console.print(f"[bold]Successfully connected to tailnet:[/bold] [green]{name}[/green]")
-        
+        console.print(
+            f"[bold]Successfully connected to tailnet:[/bold] [green]{name}[/green]"
+        )
+
         # If there's more information available
         if "created" in data:
             console.print(f"Created: {data['created']}")
         if "acls_enforced" in data:
             acls = "Yes" if data["acls_enforced"] else "No"
             console.print(f"ACLs enforced: {acls}")
-            
+
         console.print("\n[green]✓[/green] Authentication is working correctly")
-        
+
     except ValueError as e:
         console.print(f"[red]Error:[/red] {str(e)}")
         raise typer.Exit(code=1)
@@ -254,16 +256,18 @@ def help():
     """Show detailed help information."""
     console.print("[bold]Tailnet Admin CLI Tool[/bold]")
     console.print("A command-line tool for managing Tailscale tailnets.\n")
-    
+
     console.print("[bold]Authentication[/bold]")
     console.print("Before using this tool, you need to authenticate with Tailscale:")
-    console.print("  [green]tailnet-admin auth[/green] --client-id <ID> --client-secret <SECRET> --tailnet <NAME>")
+    console.print(
+        "  [green]tailnet-admin auth[/green] --client-id <ID> --client-secret <SECRET> --tailnet <NAME>"
+    )
     console.print("\nYou can also use environment variables:")
     console.print("  [green]export TAILSCALE_CLIENT_ID[/green]=your-client-id")
     console.print("  [green]export TAILSCALE_CLIENT_SECRET[/green]=your-client-secret")
     console.print("  [green]export TAILSCALE_TAILNET[/green]=your-tailnet.example.com")
     console.print("  [green]tailnet-admin auth[/green]\n")
-    
+
     console.print("[bold]Available Commands[/bold]")
     console.print("  [green]auth[/green]       Authenticate with the Tailscale API")
     console.print("  [green]status[/green]     Check your authentication status")
@@ -272,7 +276,7 @@ def help():
     console.print("  [green]keys[/green]       List all API keys")
     console.print("  [green]logout[/green]     Clear authentication data")
     console.print("  [green]help[/green]       Show this help information\n")
-    
+
     console.print("[bold]Creating an OAuth Client[/bold]")
     console.print("To create an OAuth client:")
     console.print("1. Go to [green]https://login.tailscale.com/admin[/green]")
@@ -280,8 +284,10 @@ def help():
     console.print("3. Click 'Create OAuth client'")
     console.print("4. Select scopes: [green]devices:read keys:read[/green]")
     console.print("5. Save the client ID and secret\n")
-    
-    console.print("For more information, visit [green]https://tailscale.com/kb/1215/oauth-clients[/green]")
+
+    console.print(
+        "For more information, visit [green]https://tailscale.com/kb/1215/oauth-clients[/green]"
+    )
 
 
 if __name__ == "__main__":

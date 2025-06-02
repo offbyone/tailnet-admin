@@ -19,3 +19,8 @@ tailnet-admin = "tailnet_admin.cli:app"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ipdb>=0.13.13",
+]
