@@ -5,8 +5,12 @@ from rich.console import Console
 
 from tailnet_admin import __version__
 from tailnet_admin.api import TailscaleAPI
+from tailnet_admin.tag_cli import app as tag_app
 
 app = typer.Typer(help="Tailscale Tailnet administration CLI tool")
+
+# Add tag commands as a subcommand group
+app.add_typer(tag_app, name="tag", help="Manage device tags")
 console = Console()
 
 
@@ -73,41 +77,6 @@ def auth(
         console.print(
             "[yellow]Try checking your client ID, secret, and tailnet name.[/yellow]"
         )
-        raise typer.Exit(code=1)
-
-
-@app.command()
-def test_auth():
-    """Test the authentication and display basic information."""
-    try:
-        api = TailscaleAPI.from_stored_auth()
-
-        # Make a simple API request to test the token
-        response = api.client.get(f"/tailnet/{api.tailnet}")
-        response.raise_for_status()
-
-        # Extract and display basic information
-        data = response.json()
-        name = data.get("name", "Unknown")
-        console.print(
-            f"[bold]Successfully connected to tailnet:[/bold] [green]{name}[/green]"
-        )
-
-        # If there's more information available
-        if "created" in data:
-            console.print(f"Created: {data['created']}")
-        if "acls_enforced" in data:
-            acls = "Yes" if data["acls_enforced"] else "No"
-            console.print(f"ACLs enforced: {acls}")
-
-        console.print("\n[green]✓[/green] Authentication is working correctly")
-
-    except ValueError as e:
-        console.print(f"[red]Error:[/red] {str(e)}")
-        raise typer.Exit(code=1)
-    except Exception as e:
-        console.print(f"[red]Authentication test failed:[/red] {str(e)}")
-        console.print("[yellow]Try running 'tailnet-admin auth' again.[/yellow]")
         raise typer.Exit(code=1)
 
 
@@ -275,14 +244,24 @@ def help():
     console.print("  [green]devices[/green]    List all devices in your tailnet")
     console.print("  [green]keys[/green]       List all API keys")
     console.print("  [green]logout[/green]     Clear authentication data")
-    console.print("  [green]help[/green]       Show this help information\n")
+    console.print("  [green]help[/green]       Show this help information")
+    console.print("  [green]tag[/green]        Manage device tags\n")
+    
+    console.print("[bold]Tag Management Commands[/bold]")
+    console.print("  [green]tag list[/green]             List all tags in your tailnet")
+    console.print("  [green]tag device-tags[/green]      List all devices with their tags")
+    console.print("  [green]tag rename[/green]           Rename a tag on all devices")
+    console.print("  [green]tag add-if-has[/green]       Add a tag if another tag is present")
+    console.print("  [green]tag add-if-missing[/green]   Add a tag if another tag is missing")
+    console.print("  [green]tag remove[/green]           Remove a tag from all devices")
+    console.print("  [green]tag set[/green]              Set specific tags for specific devices\n")
 
     console.print("[bold]Creating an OAuth Client[/bold]")
     console.print("To create an OAuth client:")
     console.print("1. Go to [green]https://login.tailscale.com/admin[/green]")
     console.print("2. Navigate to Settings > OAuth clients")
     console.print("3. Click 'Create OAuth client'")
-    console.print("4. Select scopes: [green]devices:read keys:read[/green]")
+    console.print("4. Select scopes: [green]devices:read devices:write keys:read[/green]")
     console.print("5. Save the client ID and secret\n")
 
     console.print(

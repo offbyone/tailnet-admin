@@ -45,12 +45,6 @@ Check authentication status:
 tailnet-admin status
 ```
 
-Test authentication with the Tailscale API:
-
-```bash
-tailnet-admin test_auth
-```
-
 List all devices in your tailnet:
 
 ```bash
@@ -69,6 +63,59 @@ Log out and clear authentication data:
 tailnet-admin logout
 ```
 
+### Tag Management
+
+tailnet-admin includes powerful tag management capabilities for bulk operations on your Tailscale devices.
+
+List all tags in your tailnet:
+
+```bash
+tailnet-admin tag list
+```
+
+List all devices with their tags:
+
+```bash
+tailnet-admin tag device-tags
+```
+
+#### Bulk Tag Operations
+
+Rename a tag on all devices:
+
+```bash
+tailnet-admin tag rename old-tag new-tag
+```
+
+Add a tag to devices that have another specific tag:
+
+```bash
+tailnet-admin tag add-if-has existing-tag new-tag
+```
+
+Add a tag to devices that are missing a specific tag:
+
+```bash
+tailnet-admin tag add-if-missing missing-tag new-tag
+```
+
+Remove a tag from all devices:
+
+```bash
+tailnet-admin tag remove tag-to-remove
+```
+
+Set specific tags for specific devices (replaces all existing tags):
+
+```bash
+tailnet-admin tag set device-id1,device-id2 --tag tag1 --tag tag2
+```
+
+All tag commands support the following options:
+
+- `--dry-run` / `-d`: Show what changes would be made without applying them
+- `--yes` / `-y`: Skip the confirmation prompt
+
 ## Creating Tailscale OAuth Clients
 
 To use this tool, you need to create an OAuth client in the Tailscale admin console:
@@ -79,6 +126,7 @@ To use this tool, you need to create an OAuth client in the Tailscale admin cons
 4. Provide a name for your client (e.g., "tailnet-admin CLI")
 5. Select the required scopes:
    - `devices:read` - Access device information
+   - `devices:write` - Modify device information (required for tag management)
    - `keys:read` - Access API keys information
 6. Click "Create client"
 7. Save the generated client ID and client secret securely

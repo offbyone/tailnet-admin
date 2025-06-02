@@ -19,6 +19,7 @@ class Device(BaseModel):
     ip: str
     last_seen: str
     os: str
+    tags: Optional[List[str]] = None
 
 
 class ApiKey(BaseModel):
@@ -124,6 +125,7 @@ class TailscaleAPI:
                 "client_id": client_id,
                 "client_secret": client_secret,
                 "grant_type": "client_credentials",
+                "scope": "devices:read devices:write keys:read",
             }
 
             headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -219,11 +221,68 @@ class TailscaleAPI:
                 "ip": ip,
                 "last_seen": device_data.get("lastSeen", ""),
                 "os": device_data.get("os", ""),
+                "tags": device_data.get("tags", []),
             }
 
             processed_devices.append(Device(**device))
 
         return processed_devices
+        
+    def get_device(self, device_id: str) -> Device:
+        """Get details of a specific device.
+        
+        Args:
+            device_id: The device ID
+            
+        Returns:
+            Device: The device details
+            
+        Raises:
+            httpx.HTTPStatusError: If the API request fails
+        """
+        response = self.client.get(f"/device/{device_id}")
+        response.raise_for_status()
+        
+        device_data = response.json()
+        
+        # Extract the main IP address (usually the first one)
+        ip = (
+            device_data.get("addresses", [""])[0]
+            if device_data.get("addresses")
+            else ""
+        )
+        
+        # Create a device object
+        device = Device(
+            id=device_data.get("id", ""),
+            name=device_data.get("hostname", device_data.get("name", "")),
+            ip=ip,
+            last_seen=device_data.get("lastSeen", ""),
+            os=device_data.get("os", ""),
+            tags=device_data.get("tags", []),
+        )
+        
+        return device
+    
+    def update_device_tags(self, device_id: str, tags: List[str]) -> Device:
+        """Update tags for a specific device.
+        
+        Args:
+            device_id: The device ID
+            tags: List of tags to set for the device
+            
+        Returns:
+            Device: The updated device
+            
+        Raises:
+            httpx.HTTPStatusError: If the API request fails
+        """
+        data = {"tags": tags}
+        response = self.client.post(f"/device/{device_id}/tags", json=data)
+        response.raise_for_status()
+        
+        # Return the updated device
+        return self.get_device(device_id)
 
     def get_keys(self) -> List[ApiKey]:
         """Get all API keys.
