@@ -45,6 +45,12 @@ Check authentication status:
 tailnet-admin status
 ```
 
+Test authentication with the Tailscale API:
+
+```bash
+tailnet-admin test_auth
+```
+
 List all devices in your tailnet:
 
 ```bash
@@ -63,21 +69,23 @@ Log out and clear authentication data:
 tailnet-admin logout
 ```
 
-## Creating Tailscale API Keys
+## Creating Tailscale OAuth Clients
 
-To use this tool, you need to create an API client in the Tailscale admin console:
+To use this tool, you need to create an OAuth client in the Tailscale admin console:
 
 1. Log in to the [Tailscale admin console](https://login.tailscale.com/admin)
-2. Navigate to Settings > API Access
-3. Click "Create API Key"
-4. Provide a description (e.g., "tailnet-admin CLI")
-5. Select the required permissions:
-   - Devices (read)
-   - API keys (read)
-6. Click "Create"
+2. Navigate to Settings > OAuth clients
+3. Click "Create OAuth client"
+4. Provide a name for your client (e.g., "tailnet-admin CLI")
+5. Select the required scopes:
+   - `devices:read` - Access device information
+   - `keys:read` - Access API keys information
+6. Click "Create client"
 7. Save the generated client ID and client secret securely
 
-The client ID starts with `tskey-api-` and the client secret is only shown once when created.
+The client secret is only shown once when created, so make sure to copy it immediately.
+
+This tool uses the OAuth 2.0 client credentials grant type as described in the [Tailscale OAuth documentation](https://tailscale.com/kb/1215/oauth-clients).
 
 ## Environment Variables
 

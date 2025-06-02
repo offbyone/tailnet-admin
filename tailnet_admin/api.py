@@ -95,43 +95,38 @@ class TailscaleAPI:
         return cls(tailnet=tailnet, token=token)
     
     def authenticate(self, client_id: str, client_secret: str) -> None:
-        """Authenticate with Tailscale API using client credentials.
+        """Authenticate with Tailscale API using OAuth client credentials flow.
         
         Args:
-            client_id: API client ID
-            client_secret: API client secret
+            client_id: OAuth client ID
+            client_secret: OAuth client secret
         
         Raises:
             ValueError: If authentication fails
         """
         import time
-        import base64
         from rich.console import Console
         
         console = Console()
         
         try:
-            # For Tailscale, we use Basic Auth with client ID and secret
-            # to obtain an access token directly
-            auth_string = f"{client_id}:{client_secret}"
-            auth_bytes = auth_string.encode('ascii')
-            auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+            # Using OAuth 2.0 client credentials grant type
+            # as per https://tailscale.com/kb/1215/oauth-clients#tailscale-oauth-token-endpoint
+            token_endpoint = "https://api.tailscale.com/api/v2/oauth/token"
             
-            # Set the authorization header with Basic auth
+            # Prepare the request data for client credentials grant
+            data = {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "grant_type": "client_credentials"
+            }
+            
             headers = {
-                "Authorization": f"Basic {auth_b64}",
                 "Content-Type": "application/x-www-form-urlencoded"
             }
             
-            # Make the request to get an access token
-            token_endpoint = "https://api.tailscale.com/api/v2/oauth/token"
-            data = {
-                "grant_type": "client_credentials",
-                "client_id": client_id
-            }
-            
             console.print("Authenticating with Tailscale API...")
-            response = httpx.post(token_endpoint, headers=headers, data=data)
+            response = httpx.post(token_endpoint, data=data, headers=headers)
             response.raise_for_status()
             
             token_info = response.json()
@@ -144,7 +139,7 @@ class TailscaleAPI:
             config_dir = Path.home() / ".config" / "tailnet-admin"
             config_dir.mkdir(parents=True, exist_ok=True)
             
-            # Calculate expiration time (default to 1 hour if not provided)
+            # Tokens expire after 1 hour (3600 seconds) as per Tailscale docs
             expires_in = token_info.get("expires_in", 3600)
             expires_at = time.time() + expires_in
             
@@ -168,8 +163,19 @@ class TailscaleAPI:
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
                 raise ValueError("Authentication failed: Invalid client ID or secret")
+            elif e.response.status_code == 400:
+                error_msg = "Authentication failed: Invalid request"
+                try:
+                    error_data = e.response.json()
+                    if "error_description" in error_data:
+                        error_msg = f"Authentication failed: {error_data['error_description']}"
+                    elif "error" in error_data:
+                        error_msg = f"Authentication failed: {error_data['error']}"
+                except Exception:
+                    pass
+                raise ValueError(error_msg)
             else:
-                raise ValueError(f"Authentication failed: {e.response.text}")
+                raise ValueError(f"Authentication failed: HTTP {e.response.status_code}")
         except Exception as e:
             raise ValueError(f"Authentication failed: {str(e)}")
     
