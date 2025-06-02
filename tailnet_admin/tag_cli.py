@@ -10,8 +10,11 @@ from tailnet_admin.api import TailscaleAPI
 from tailnet_admin.tags import (
     add_tag_if_has_tag,
     add_tag_if_missing_tag,
+    add_tags_to_devices,
     confirm_changes,
     get_all_devices_with_tags,
+    normalize_tag,
+    normalize_tags,
     print_tag_changes,
     remove_tag_from_all,
     rename_tag,
@@ -199,19 +202,30 @@ def add_if_missing_command(
 
 @app.command(name="remove")
 def remove_tag_command(
-    tag: str = typer.Argument(..., help="Tag to remove from all devices"),
+    tag: str = typer.Argument(..., help="Tag to remove"),
+    devices: Optional[List[str]] = typer.Option(
+        None, "--device", "-d", help="Device name or ID (can be used multiple times)"
+    ),
     act: bool = typer.Option(
         False, "--act", "-a", help="Actually apply the changes (default is dry run)"
     ),
 ):
-    """Remove a tag from all devices in the tailnet."""
+    """Remove a tag from devices.
+    
+    If no devices are specified, removes the tag from all devices in the tailnet.
+    """
     try:
         api = TailscaleAPI.from_stored_auth()
 
         # Get the changes that would be made
-        changes = remove_tag_from_all(api, tag, dry_run=True)
+        changes = remove_tag_from_all(api, tag, device_identifiers=devices, dry_run=True)
 
-        console.print(f"[bold]Removing tag[/bold] {tag} [bold]from all devices[/bold]")
+        if devices:
+            device_str = f"from {len(devices)} specified devices"
+        else:
+            device_str = "from all devices"
+            
+        console.print(f"[bold]Removing tag[/bold] {tag} [bold]{device_str}[/bold]")
         print_tag_changes(changes, console)
 
         if not changes:
@@ -224,7 +238,7 @@ def remove_tag_command(
             return
 
         # Apply the changes
-        remove_tag_from_all(api, tag, dry_run=False)
+        remove_tag_from_all(api, tag, device_identifiers=devices, dry_run=False)
         console.print(
             f"[green]Successfully removed tag from {len(changes)} devices.[/green]"
         )
@@ -239,7 +253,7 @@ def remove_tag_command(
 
 @app.command(name="set")
 def set_tags_command(
-    device_ids: List[str] = typer.Argument(..., help="Device IDs (comma-separated)"),
+    devices: List[str] = typer.Argument(..., help="Device names or IDs (comma-separated)"),
     tags: List[str] = typer.Option(
         ..., "--tag", "-t", help="Tags to set (can be used multiple times)"
     ),
@@ -252,11 +266,11 @@ def set_tags_command(
         api = TailscaleAPI.from_stored_auth()
 
         # Get the changes that would be made
-        changes = set_device_tags(api, device_ids, tags, dry_run=True)
+        changes = set_device_tags(api, devices, tags, dry_run=True)
 
         tag_list = ", ".join(tags) if tags else "none"
         console.print(
-            f"[bold]Setting tags for {len(device_ids)} devices:[/bold] {tag_list}"
+            f"[bold]Setting tags for {len(devices)} devices:[/bold] {tag_list}"
         )
         print_tag_changes(changes, console)
 
@@ -270,7 +284,51 @@ def set_tags_command(
             return
 
         # Apply the changes
-        set_device_tags(api, device_ids, tags, dry_run=False)
+        set_device_tags(api, devices, tags, dry_run=False)
+        console.print(f"[green]Successfully updated {len(changes)} devices.[/green]")
+
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {str(e)}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        console.print(f"[red]Unexpected error:[/red] {str(e)}")
+        raise typer.Exit(code=1)
+
+
+@app.command(name="add")
+def add_tags_command(
+    devices: List[str] = typer.Argument(..., help="Device names or IDs (comma-separated)"),
+    tags: List[str] = typer.Option(
+        ..., "--tag", "-t", help="Tags to add (can be used multiple times)"
+    ),
+    act: bool = typer.Option(
+        False, "--act", "-a", help="Actually apply the changes (default is dry run)"
+    ),
+):
+    """Add tags to specific devices (preserves existing tags)."""
+    try:
+        api = TailscaleAPI.from_stored_auth()
+
+        # Get the changes that would be made
+        changes = add_tags_to_devices(api, devices, tags, dry_run=True)
+
+        tag_list = ", ".join(tags) if tags else "none"
+        console.print(
+            f"[bold]Adding tags to {len(devices)} devices:[/bold] {tag_list}"
+        )
+        print_tag_changes(changes, console)
+
+        if not changes:
+            return
+
+        if not act:
+            console.print(
+                "[yellow]Dry run mode. No changes were made. Use --act to apply changes.[/yellow]"
+            )
+            return
+
+        # Apply the changes
+        add_tags_to_devices(api, devices, tags, dry_run=False)
         console.print(f"[green]Successfully updated {len(changes)} devices.[/green]")
 
     except ValueError as e:
@@ -301,7 +359,8 @@ def device_tags_command(
             devices = [d for d in devices if name_filter in d.name.lower()]
 
         if tag_filter:
-            devices = [d for d in devices if d.tags and tag_filter in d.tags]
+            normalized_tag_filter = normalize_tag(tag_filter)
+            devices = [d for d in devices if d.tags and normalized_tag_filter in d.tags]
 
         if not devices:
             console.print("[yellow]No devices found matching the filters.[/yellow]")

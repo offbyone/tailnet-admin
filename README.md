@@ -99,21 +99,33 @@ Add a tag to devices that are missing a specific tag:
 tailnet-admin tag add-if-missing missing-tag new-tag
 ```
 
-Remove a tag from all devices:
+Remove a tag from devices (all devices or specific ones):
 
 ```bash
+# Remove from all devices
 tailnet-admin tag remove tag-to-remove
+
+# Remove from specific devices
+tailnet-admin tag remove tag-to-remove --device device1 --device laptop2
+```
+
+Add tags to specific devices (preserves existing tags):
+
+```bash
+tailnet-admin tag add device1,laptop2 --tag tag1 --tag tag2
 ```
 
 Set specific tags for specific devices (replaces all existing tags):
 
 ```bash
-tailnet-admin tag set device-id1,device-id2 --tag tag1 --tag tag2
+tailnet-admin tag set device1,laptop2 --tag tag1 --tag tag2
 ```
 
 All tag commands support the following options:
 
 - `--act` / `-a`: Actually apply the changes (default is dry run mode)
+
+All commands accept both device names and device IDs for identifying devices. Tags can be specified with or without the `tag:` prefix.
 
 ## Creating Tailscale OAuth Clients
 
