@@ -113,8 +113,7 @@ tailnet-admin tag set device-id1,device-id2 --tag tag1 --tag tag2
 
 All tag commands support the following options:
 
-- `--dry-run` / `-d`: Show what changes would be made without applying them
-- `--yes` / `-y`: Skip the confirmation prompt
+- `--act` / `-a`: Actually apply the changes (default is dry run mode)
 
 ## Creating Tailscale OAuth Clients
 
