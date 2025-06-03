@@ -45,6 +45,18 @@ Check authentication status:
 tailnet-admin status
 ```
 
+Check OAuth token scopes and permissions:
+
+```bash
+tailnet-admin scopes
+```
+
+Debug authentication issues:
+
+```bash
+tailnet-admin debug-auth
+```
+
 List all devices in your tailnet:
 
 ```bash
@@ -55,6 +67,21 @@ List all API keys:
 
 ```bash
 tailnet-admin keys
+
+# Show detailed API response
+tailnet-admin keys --verbose
+
+# Show raw key IDs for easier copying
+tailnet-admin keys --raw-ids
+```
+
+Get information about a specific API key:
+
+```bash
+tailnet-admin debug-key YOUR_KEY_ID
+
+# Show additional debug information
+tailnet-admin debug-key YOUR_KEY_ID --verbose
 ```
 
 Log out and clear authentication data:
@@ -139,12 +166,25 @@ To use this tool, you need to create an OAuth client in the Tailscale admin cons
    - `devices:read` - Access device information
    - `devices:write` - Modify device information (required for tag management)
    - `keys:read` - Access API keys information
+   - Or use the `all` scope, but note that you may still need to specify individual scopes during token exchange
 6. Click "Create client"
 7. Save the generated client ID and client secret securely
 
 The client secret is only shown once when created, so make sure to copy it immediately.
 
 This tool uses the OAuth 2.0 client credentials grant type as described in the [Tailscale OAuth documentation](https://tailscale.com/kb/1215/oauth-clients).
+
+### OAuth Scope Issues
+
+If you encounter 403 Forbidden errors when trying to update device tags, it's likely due to missing the `devices:write` scope in your OAuth token. This can happen even if your OAuth client has the `all` scope in the Tailscale admin console.
+
+To troubleshoot scope issues:
+
+1. Run `tailnet-admin scopes` to check which permissions your current token has
+2. If permissions are missing, re-authenticate with `tailnet-admin auth`
+3. If that doesn't work, create a new OAuth client with explicit scopes rather than the `all` scope
+
+The OAuth token exchange requires specific scopes to be requested, even if your client has the `all` scope. This is why we explicitly request `devices:read devices:write keys:read tailnet:devices` during authentication.
 
 ## Environment Variables
 
@@ -177,6 +217,22 @@ You can set these variables in several ways:
 ## API Documentation
 
 This tool uses the Tailscale API. For more information, see the [Tailscale API documentation](https://tailscale.com/api).
+
+### API Key Endpoints
+
+According to the Tailscale API documentation, the endpoint for getting API key information is:
+
+```
+GET /api/v2/tailnet/{tailnet}/keys/{keyID}
+```
+
+If you're experiencing issues with API key access, you can use the `debug-key` command to diagnose the problem:
+
+```bash
+tailnet-admin debug-key YOUR_KEY_ID --verbose
+```
+
+This command will try different endpoint patterns and show detailed information about the requests and responses.
 
 ## License
 

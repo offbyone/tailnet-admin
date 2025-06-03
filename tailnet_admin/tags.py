@@ -360,7 +360,7 @@ def set_device_tags(
 
 
 def print_tag_changes(changes: List[Tuple[Device, List[str], List[str]]], console: Console):
-    """Print tag changes in a table format.
+    """Print tag changes in a table format with color-coded diffs.
     
     Args:
         changes: List of (device, old_tags, new_tags) tuples
@@ -372,16 +372,50 @@ def print_tag_changes(changes: List[Tuple[Device, List[str], List[str]]], consol
     
     table = Table(title="Tag Changes")
     table.add_column("Device Name", style="cyan")
-    table.add_column("Device ID", style="dim")
-    table.add_column("Old Tags", style="yellow")
-    table.add_column("New Tags", style="green")
+    table.add_column("Device ID", style="dim", width=12)
+    table.add_column("Changes", no_wrap=False)
     
     for device, old_tags, new_tags in changes:
+        # Calculate added and removed tags
+        old_set = set(old_tags)
+        new_set = set(new_tags)
+        added = new_set - old_set
+        removed = old_set - new_set
+        unchanged = old_set.intersection(new_set)
+        
+        # Build a compact diff display
+        diff_parts = []
+        
+        # Show removed tags with red minus
+        for tag in sorted(removed):
+            diff_parts.append(f"[red]-{tag}[/red]")
+            
+        # Show added tags with green plus
+        for tag in sorted(added):
+            diff_parts.append(f"[green]+{tag}[/green]")
+            
+        # Show unchanged tags only if there are few changes
+        if len(diff_parts) < 3 and unchanged:
+            for tag in sorted(unchanged):
+                diff_parts.append(f"[dim]{tag}[/dim]")
+        elif unchanged:
+            # Just indicate there are unchanged tags
+            unchanged_count = len(unchanged)
+            if unchanged_count == 1:
+                diff_parts.append(f"[dim](+1 unchanged)[/dim]")
+            else:
+                diff_parts.append(f"[dim](+{unchanged_count} unchanged)[/dim]")
+        
+        # If nothing changed (shouldn't happen but just in case)
+        if not diff_parts:
+            diff_parts = ["[yellow]No changes[/yellow]"]
+            
+        diff_display = " ".join(diff_parts)
+        
         table.add_row(
             device.name,
-            device.id,
-            ", ".join(old_tags) if old_tags else "[dim]none[/dim]",
-            ", ".join(new_tags) if new_tags else "[dim]none[/dim]"
+            device.id[:10] + "…" if len(device.id) > 12 else device.id,
+            diff_display
         )
     
     console.print(table)
